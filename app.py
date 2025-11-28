@@ -1,10 +1,13 @@
 from flask import Flask, request, send_file, jsonify
 import requests
 import io
+import os
 
 app = Flask(__name__)
 
 HF_API_URL = "https://api-inference.huggingface.co/models/facebook/mms-tts-eng"
+# Add your Hugging Face API token here if you have one
+HF_TOKEN = os.environ.get('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', '')
 
 @app.route('/')
 def home():
@@ -32,22 +35,34 @@ def text_to_speech():
         
         print(f"Generating: {text[:50]}...")
         
+        headers = {"Content-Type": "application/json"}
+        if HF_TOKEN:
+            headers["Authorization"] = f"Bearer {HF_TOKEN}"
+        
         response = requests.post(
             HF_API_URL,
+            headers=headers,
             json={"inputs": text},
             timeout=60
         )
         
+        print(f"HF Response Status: {response.status_code}")
+        
         if response.status_code == 200:
             buffer = io.BytesIO(response.content)
+            buffer.seek(0)
             return send_file(
                 buffer,
                 mimetype='audio/flac',
                 as_attachment=True,
                 download_name='speech.flac'
             )
+        elif response.status_code == 503:
+            return jsonify({'error': 'Model is loading, please try again in 20 seconds'}), 503
         else:
-            return jsonify({'error': f'API error: {response.status_code}'}), 500
+            error_msg = response.text[:200]
+            print(f"HF Error: {error_msg}")
+            return jsonify({'error': f'API error: {response.status_code}', 'details': error_msg}), 500
             
     except Exception as e:
         print(f"Error: {str(e)}")
