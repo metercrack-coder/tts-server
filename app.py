@@ -5,16 +5,19 @@ import os
 
 app = Flask(__name__)
 
-# Updated API endpoint - use the router endpoint instead
+# Use the new router endpoint
 HF_API_URL = "https://router.huggingface.co/models/facebook/mms-tts-eng"
-HF_TOKEN = os.environ.get('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', '')
+
+# Get token from environment variable (NOT hardcoded!)
+HF_TOKEN = os.environ.get('HF_TOKEN', '')
 
 @app.route('/')
 def home():
     return jsonify({
         "status": "online",
         "model": "MMS TTS English",
-        "endpoint": "/tts"
+        "endpoint": "/tts",
+        "token_configured": bool(HF_TOKEN)
     })
 
 @app.route('/health')
@@ -33,15 +36,15 @@ def text_to_speech():
         if len(text) > 1000:
             return jsonify({'error': 'Text too long'}), 400
         
+        if not HF_TOKEN:
+            return jsonify({'error': 'HF_TOKEN not configured in environment'}), 500
+        
         print(f"Generating speech for: {text[:50]}...")
         
         headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {HF_TOKEN}"
         }
-        
-        # Add authorization header if token is available
-        if HF_TOKEN:
-            headers["Authorization"] = f"Bearer {HF_TOKEN}"
         
         # Make request to Hugging Face
         response = requests.post(
@@ -51,10 +54,9 @@ def text_to_speech():
             timeout=60
         )
         
-        print(f"Response status: {response.status_code}")
+        print(f"HF Response status: {response.status_code}")
         
         if response.status_code == 200:
-            # Return the audio file
             buffer = io.BytesIO(response.content)
             buffer.seek(0)
             return send_file(
@@ -67,9 +69,13 @@ def text_to_speech():
             return jsonify({
                 'error': 'Model is loading. Please wait 20 seconds and try again.'
             }), 503
+        elif response.status_code == 401:
+            return jsonify({
+                'error': 'Invalid or expired token. Please update HF_TOKEN in Render environment variables.'
+            }), 401
         else:
             error_details = response.text[:300]
-            print(f"Error from HF: {error_details}")
+            print(f"HF Error: {error_details}")
             return jsonify({
                 'error': f'API error: {response.status_code}',
                 'details': error_details
@@ -83,4 +89,4 @@ def text_to_speech():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
