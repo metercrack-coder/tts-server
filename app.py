@@ -11,6 +11,9 @@ VOICES = {
     'matthew': 'Matthew',  # Professional male
     'joey': 'Joey',        # Casual male
     'russell': 'Russell',  # Australian male
+    'emma': 'Emma',        # British female
+    'joanna': 'Joanna',    # Natural female
+    'salli': 'Salli',      # Friendly female
 }
 
 @app.route('/')
@@ -20,7 +23,8 @@ def home():
         "model": "StreamElements TTS",
         "endpoint": "/tts",
         "available_voices": list(VOICES.keys()),
-        "pricing": "✅ 100% FREE & UNLIMITED - CONFIRMED"
+        "default_voice": "brian",
+        "pricing": "✅ 100% FREE & UNLIMITED"
     })
 
 @app.route('/health')
