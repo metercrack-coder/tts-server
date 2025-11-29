@@ -1,23 +1,16 @@
 from flask import Flask, request, send_file, jsonify
-import requests
+from gtts import gTTS
 import io
-import os
 
 app = Flask(__name__)
-
-# Use the new router endpoint
-HF_API_URL = "https://router.huggingface.co/models/facebook/mms-tts-eng"
-
-# Get token from environment variable (NOT hardcoded!)
-HF_TOKEN = os.environ.get('HF_TOKEN', '')
 
 @app.route('/')
 def home():
     return jsonify({
         "status": "online",
-        "model": "MMS TTS English",
+        "model": "Google TTS",
         "endpoint": "/tts",
-        "token_configured": bool(HF_TOKEN)
+        "message": "Send POST request to /tts with JSON body: {\"text\": \"your text here\"}"
     })
 
 @app.route('/health')
@@ -27,66 +20,42 @@ def health():
 @app.route('/tts', methods=['POST'])
 def text_to_speech():
     try:
+        # Get JSON data from request
         data = request.get_json()
         text = data.get('text', '').strip()
         
+        # Validate input
         if not text:
             return jsonify({'error': 'No text provided'}), 400
         
         if len(text) > 1000:
-            return jsonify({'error': 'Text too long'}), 400
-        
-        if not HF_TOKEN:
-            return jsonify({'error': 'HF_TOKEN not configured in environment'}), 500
+            return jsonify({'error': 'Text too long (max 1000 characters)'}), 400
         
         print(f"Generating speech for: {text[:50]}...")
         
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {HF_TOKEN}"
-        }
+        # Generate speech using Google TTS
+        tts = gTTS(text=text, lang='en', slow=False)
         
-        # Make request to Hugging Face
-        response = requests.post(
-            HF_API_URL,
-            headers=headers,
-            json={"inputs": text},
-            timeout=60
+        # Save to memory buffer (not to disk)
+        buffer = io.BytesIO()
+        tts.write_to_fp(buffer)
+        buffer.seek(0)
+        
+        print("Speech generated successfully!")
+        
+        # Return MP3 file
+        return send_file(
+            buffer,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name='speech.mp3'
         )
-        
-        print(f"HF Response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            buffer = io.BytesIO(response.content)
-            buffer.seek(0)
-            return send_file(
-                buffer,
-                mimetype='audio/flac',
-                as_attachment=True,
-                download_name='speech.flac'
-            )
-        elif response.status_code == 503:
-            return jsonify({
-                'error': 'Model is loading. Please wait 20 seconds and try again.'
-            }), 503
-        elif response.status_code == 401:
-            return jsonify({
-                'error': 'Invalid or expired token. Please update HF_TOKEN in Render environment variables.'
-            }), 401
-        else:
-            error_details = response.text[:300]
-            print(f"HF Error: {error_details}")
-            return jsonify({
-                'error': f'API error: {response.status_code}',
-                'details': error_details
-            }), response.status_code
             
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'Request timeout. Please try again.'}), 504
     except Exception as e:
-        print(f"Exception: {str(e)}")
+        print(f"Error occurred: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)
