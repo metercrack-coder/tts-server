@@ -1,36 +1,26 @@
 from flask import Flask, request, send_file, jsonify
-import edge_tts
-import asyncio
+import requests
 import io
-import os
 
 app = Flask(__name__)
 
-# Popular natural-sounding voices
+# StreamElements voices - truly free and unlimited
 VOICES = {
-    'andrew': 'en-US-AndrewNeural',          # Male, natural, great for content
-    'brian': 'en-US-BrianNeural',            # Male, deep voice
-    'christopher': 'en-US-ChristopherNeural', # Male, professional
-    'eric': 'en-US-EricNeural',              # Male, friendly
-    'guy': 'en-US-GuyNeural',                # Male, warm
-    'davis': 'en-US-DavisNeural',            # Male, storyteller (HIGHLY RECOMMENDED)
-    'tony': 'en-US-TonyNeural',              # Male, authoritative
-    'jason': 'en-US-JasonNeural',            # Male, casual
-    'jenny': 'en-US-JennyNeural',            # Female, clear
-    'aria': 'en-US-AriaNeural',              # Female, natural
-    'michelle': 'en-US-MichelleNeural',      # Female, professional
-    'sara': 'en-US-SaraNeural',              # Female, soft
+    'brian': 'Brian',      # Deep male - closest to Adam
+    'justin': 'Justin',    # Young male
+    'matthew': 'Matthew',  # Professional male
+    'joey': 'Joey',        # Casual male
+    'russell': 'Russell',  # Australian male
 }
 
 @app.route('/')
 def home():
     return jsonify({
         "status": "online",
-        "model": "Microsoft Edge TTS",
+        "model": "StreamElements TTS",
         "endpoint": "/tts",
         "available_voices": list(VOICES.keys()),
-        "pricing": "FREE & UNLIMITED",
-        "default_voice": "andrew"
+        "pricing": "✅ 100% FREE & UNLIMITED - CONFIRMED"
     })
 
 @app.route('/health')
@@ -42,27 +32,27 @@ def text_to_speech():
     try:
         data = request.get_json()
         text = data.get('text', '').strip()
-        voice = data.get('voice', 'andrew')  # Default to Andrew
+        voice = data.get('voice', 'brian')
         
         if not text:
             return jsonify({'error': 'No text provided'}), 400
         
         if len(text) > 5000:
-            return jsonify({'error': 'Text too long (max 5000 characters)'}), 400
+            return jsonify({'error': 'Text too long'}), 400
         
-        # Get voice ID
-        voice_id = VOICES.get(voice.lower(), VOICES['andrew'])
+        voice_name = VOICES.get(voice.lower(), VOICES['brian'])
         
-        print(f"Generating speech with voice '{voice}' for: {text[:50]}...")
+        print(f"Generating speech with voice '{voice_name}' for: {text[:50]}...")
         
-        # Generate speech using Edge TTS
-        audio_data = asyncio.run(generate_speech(text, voice_id))
+        url = f"https://api.streamelements.com/kappa/v2/speech?voice={voice_name}&text={requests.utils.quote(text)}"
         
-        if audio_data:
-            buffer = io.BytesIO(audio_data)
+        response = requests.get(url, timeout=30)
+        
+        if response.status_code == 200:
+            buffer = io.BytesIO(response.content)
             buffer.seek(0)
             
-            print(f"Speech generated successfully! Size: {len(audio_data)} bytes")
+            print("Speech generated successfully!")
             
             return send_file(
                 buffer,
@@ -71,33 +61,13 @@ def text_to_speech():
                 download_name='speech.mp3'
             )
         else:
-            return jsonify({'error': 'Failed to generate speech'}), 500
+            return jsonify({'error': f'API error: {response.status_code}'}), 500
             
     except Exception as e:
         print(f"Error: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-async def generate_speech(text, voice):
-    """Generate speech using Edge TTS"""
-    try:
-        # Create Edge TTS communicate object
-        communicate = edge_tts.Communicate(text, voice)
-        
-        # Collect audio data chunks
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
-        
-        return audio_data
-    except Exception as e:
-        print(f"Edge TTS generation error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
 if __name__ == '__main__':
+    import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port)
